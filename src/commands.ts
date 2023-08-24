@@ -7,6 +7,7 @@ export class Commands implements vscode.Disposable {
     private EXTENTSION_NAME = "verilog";
     private COMPILE_COMMANDS = "iverilog -o {fileName}.out {fileName}";
     private EXECUTE_COMMANDS = "vvp {fileName}.out";
+    private REMOVE_FILE_COMMANDS = "rm {fileName}.out"
 
     private outputChannel: vscode.OutputChannel;
     private terminal: vscode.Terminal;
@@ -46,24 +47,30 @@ export class Commands implements vscode.Disposable {
         const runInTerminal = this.config.get<boolean>("runInTerminal");
         const clearPreviousOutput = this.config.get<boolean>("clearPreviousOutput");
         const preserveFocus = this.config.get<boolean>("preserveFocus");
+        const removeAfterRun = this.config.get<boolean>("removeAfterRun");
+
         if (runInTerminal) {
-            this.executeCommandInTerminal(fileName, clearPreviousOutput, preserveFocus);
+            this.executeCommandInTerminal(fileName, clearPreviousOutput, preserveFocus, removeAfterRun);
         } else {
-            this.executeCommandInOutputChannel(fileName, clearPreviousOutput, preserveFocus);
+            this.executeCommandInOutputChannel(fileName, clearPreviousOutput, preserveFocus, removeAfterRun);
         }
     }
 
-    public executeCommandInTerminal(fileName: string, clearPreviousOutput, preserveFocus): void {
+    public executeCommandInTerminal(fileName: string, clearPreviousOutput, preserveFocus, removeAfterRun): void {
         if (clearPreviousOutput) {
             vscode.commands.executeCommand("workbench.action.terminal.clear");
         }
         this.terminal.show(preserveFocus);
         this.terminal.sendText(`cd "${this.cwd}"`);
         this.terminal.sendText(this.COMPILE_COMMANDS.replace(/{fileName}/g, fileName));
-        this.terminal.sendText(this.EXECUTE_COMMANDS.replace(/{fileName}/g, fileName));
+        if (removeAfterRun) {
+            this.terminal.sendText(`${this.EXECUTE_COMMANDS.replace(/{fileName}/g, fileName)} && ${this.REMOVE_FILE_COMMANDS.replace(/{fileName}/g, fileName)}`);
+        } else {
+            this.terminal.sendText(this.EXECUTE_COMMANDS.replace(/{fileName}/g, fileName));
+        }
     }
 
-    public executeCommandInOutputChannel(fileName: string, clearPreviousOutput, preserveFocus): void {
+    public executeCommandInOutputChannel(fileName: string, clearPreviousOutput, preserveFocus, removeAfterRun): void {
         if (clearPreviousOutput) {
             this.outputChannel.clear();
         }
@@ -93,7 +100,11 @@ export class Commands implements vscode.Disposable {
 
             if (this.isSuccess) {
 
-                this.executeProcess = exec(this.EXECUTE_COMMANDS.replace(/{fileName}/g, fileName), { cwd: this.cwd });
+                if (removeAfterRun) {
+                    this.executeProcess = exec(`${this.EXECUTE_COMMANDS.replace(/{fileName}/g, fileName)} && ${this.REMOVE_FILE_COMMANDS.replace(/{fileName}/g, fileName)}`, { cwd: this.cwd });
+                } else {
+                    this.executeProcess = exec(this.EXECUTE_COMMANDS.replace(/{fileName}/g, fileName), { cwd: this.cwd });
+                }
                 this.executeProcess.stdout.on("data", (data) => {
                     this.outputChannel.append(data);
                 });
